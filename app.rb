@@ -1,0 +1,84 @@
+require "slack"
+require 'oauth'
+require 'json'
+require 'nokogiri'
+require 'net/http'
+require 'uri'
+
+#twitterのoauthで必要
+consumer_key = ENV['QKBOT_TWITTER_CONSUMER_KEY']
+consumer_secret = ENV['QKBOT_TWITTER_CONSUMER_SECRET']
+access_token = ENV['QKBOT_TWITTER_ACCESS_TOKEN']
+access_token_secret = ENV['QKBOT_TWITTER_ACCESS_TOKEN_SECRET']
+
+consumer = OAuth::Consumer.new(
+  consumer_key,
+  consumer_secret,
+  {
+    :site   => 'http://api.twitter.com',
+    :scheme => :header
+  }
+)
+
+token_hash = {
+  :access_token        => access_token,
+  :access_token_secret => access_token_secret
+}
+
+# Twitterへのリクエストトークン作成
+request_token = OAuth::AccessToken.from_hash(consumer, token_hash)
+
+# trends/available
+response_available = request_token.request(:get, 'https://api.twitter.com/1.1/trends/available.json')
+# レスポンスがJSON形式のためパースする
+availables = JSON.parse(response_available.body)
+
+# 日本のWOEIDだけ取得
+japan_woeid = nil
+availables.each do |available|
+  if available["name"] == "Japan" then
+    japan_woeid = available["woeid"]
+    break
+  end
+end
+
+# trends/place
+response_place = request_token.request(:get, 'https://api.twitter.com/1.1/trends/place.json?id=' + japan_woeid.to_s)
+japan_trends = JSON.parse(response_place.body)
+
+
+Slack.configure do |config|
+  config.token = ENV['QKBOT_SLACK_TOKEN']
+end
+
+trend_names = ''
+japan_trends[0]['trends'].each do |trend|
+  trend_names += '`' + trend['name'] + '` '
+end
+Slack.chat_postMessage(text: trend_names, channel: '#bot_test')
+
+# トレンドワード
+japan_trends[0]['trends'].each do |trend|
+  get_path = '/?s=' + trend['name'].delete('#')
+  puts get_path
+  url = URI.parse('http://quizknock.com')
+  res = Net::HTTP.start(url.host, url.port) do |http|
+    http.get(get_path)
+  end
+  html = res.body
+ 
+  doc = Nokogiri::HTML.parse(html, nil, 'UTF-8')
+  doc.css('a').each do |anchor|
+    link = anchor[:href] if anchor[:rel] == 'bookmark'
+    link = nil if link.to_s.include?("daily") #朝ノックを除外
+    puts link unless link.nil?
+    unless link.nil?
+      text = 'いま話題の `'+trend['name']+'` をチェック！ ' + link
+      Slack.chat_postMessage(text: text, channel: '#bot_test')
+    end
+  end
+end
+
+
+
+
