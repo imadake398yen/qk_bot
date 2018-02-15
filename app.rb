@@ -5,7 +5,6 @@ require 'nokogiri'
 require 'net/http'
 require 'uri'
 
-#twitterのoauthで必要
 consumer_key = ENV['QKBOT_TWITTER_CONSUMER_KEY']
 consumer_secret = ENV['QKBOT_TWITTER_CONSUMER_SECRET']
 access_token = ENV['QKBOT_TWITTER_ACCESS_TOKEN']
@@ -25,15 +24,11 @@ token_hash = {
   :access_token_secret => access_token_secret
 }
 
-# Twitterへのリクエストトークン作成
 request_token = OAuth::AccessToken.from_hash(consumer, token_hash)
 
-# trends/available
 response_available = request_token.request(:get, 'https://api.twitter.com/1.1/trends/available.json')
-# レスポンスがJSON形式のためパースする
 availables = JSON.parse(response_available.body)
 
-# 日本のWOEIDだけ取得
 japan_woeid = nil
 availables.each do |available|
   if available["name"] == "Japan" then
@@ -42,7 +37,6 @@ availables.each do |available|
   end
 end
 
-# trends/place
 response_place = request_token.request(:get, 'https://api.twitter.com/1.1/trends/place.json?id=' + japan_woeid.to_s)
 japan_trends = JSON.parse(response_place.body)
 
@@ -51,13 +45,12 @@ Slack.configure do |config|
   config.token = ENV['QKBOT_SLACK_TOKEN']
 end
 
-trend_names = ''
+slack_post_text = ""
 japan_trends[0]['trends'].each do |trend|
-  trend_names += '`' + trend['name'] + '` '
+  slack_post_text += "`#{trend['name']}` "
 end
-Slack.chat_postMessage(text: trend_names, channel: '#bot_test')
+slack_post_text += "\n"
 
-# トレンドワード
 japan_trends[0]['trends'].each do |trend|
   get_path = '/?s=' + trend['name'].delete('#')
   puts get_path
@@ -73,11 +66,12 @@ japan_trends[0]['trends'].each do |trend|
     link = nil if link.to_s.include?("daily") #朝ノックを除外
     puts link unless link.nil?
     unless link.nil?
-      text = 'いま話題の `'+trend['name']+'` をチェック！ ' + link
-      Slack.chat_postMessage(text: text, channel: '#bot_test')
+      slack_post_text += "いま話題の `#{trend['name']}` をチェック！ #{link} \n"
     end
   end
 end
+
+Slack.chat_postMessage(text: slack_post_text, channel: '#bot_test')
 
 
 
