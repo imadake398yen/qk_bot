@@ -49,7 +49,7 @@ slack_post_text = ""
 japan_trends[0]['trends'].each do |trend|
   slack_post_text += "`#{trend['name']}` "
 end
-slack_post_text += "\n"
+slack_post_text += "\n ``` \n"
 
 japan_trends[0]['trends'].each do |trend|
   get_path = '/?s=' + trend['name'].delete('#')
@@ -66,10 +66,12 @@ japan_trends[0]['trends'].each do |trend|
     link = nil if link.to_s.include?("daily") #朝ノックを除外
     puts link unless link.nil?
     unless link.nil?
-      slack_post_text += "いま話題の `#{trend['name']}` をチェック！ #{link} \n"
+      title = anchor[:title]
+      slack_post_text += "いま話題の `#{trend['name']}` をQuizKnockでチェック！ \n\n #{title} \n #{link} \n\n\n"
     end
   end
 end
+slack_post_text += "```"
 
 Slack.chat_postMessage(text: slack_post_text, channel: '#bot_test')
 
